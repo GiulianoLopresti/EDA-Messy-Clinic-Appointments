@@ -258,37 +258,83 @@ class GenderNormalizerTransformer(BaseEstimator, TransformerMixin):
  
 class BillingCleanerTransformer(BaseEstimator, TransformerMixin):
     """
-    Extrae el valor numérico de la columna billing_amount, que contiene
-    strings con símbolos de moneda mezclados (£, €, $, Rs).
+    Limpia billing_amount: extrae el valor numérico y convierte todas las
+    monedas a USD usando tasas de cambio fijas de referencia.
  
     Problema detectado en el EDA:
-        '£425.8'   → 425.8
-        '€344.26'  → 344.26
-        'Rs374.63' → 374.63
-        '$84.44'   → 84.44
+        '£425.80'  → Libras esterlinas
+        '€344.26'  → Euros
+        'Rs374.63' → Rupias indias
+        '$84.44'   → Dólares (moneda base)
  
-    Decisión de negocio documentada:
-        Descartamos el símbolo de moneda porque todas las citas pertenecen
-        al mismo sistema clínico y asumimos que los montos son comparables.
-        En un proyecto real habría que convertir divisas con tipos de cambio.
+    Decisión de diseño:
+        Se normalizan todos los montos a USD para que el modelo no trate
+        100 Rupias como equivalentes a 100 Libras. Sin esta conversión,
+        las diferencias de escala entre divisas introducirían un sesgo
+        sistemático en el aprendizaje.
  
-    Técnica usada:
-        Expresión regular (regex) para extraer solo dígitos y punto decimal.
-        '[\\d.]+' significa "uno o más caracteres que sean dígito o punto".
+    Tasas de cambio (referencia fija, simplificada para este proyecto):
+        GBP (£) × 1.27 → USD
+        EUR (€) × 1.09 → USD
+        INR (Rs) × 0.012 → USD
+        USD ($) × 1.0  → USD (sin cambio)
+ 
+    Args:
+        exchange_rates: Diccionario símbolo → tasa a USD. Permite actualizar
+                        las tasas sin modificar el código del transformer.
+ 
+    Returns:
+        DataFrame con billing_amount como float en USD, sin símbolos de texto.
     """
+    # Tasas de cambio por defecto (fijas, para reproducibilidad del modelo)
+    DEFAULT_RATES = {
+        "£":  1.27,   # GBP → USD
+        "€":  1.09,   # EUR → USD
+        "Rs": 0.012,  # INR → USD
+        "$":  1.00,   # USD → USD
+    }
+ 
+    def __init__(self, exchange_rates: dict = None):
+        # Permite sobreescribir las tasas desde fuera sin cambiar el código
+        self.exchange_rates = exchange_rates or self.DEFAULT_RATES
+ 
     def fit(self, X, y=None):
-        return self
+        return self  # No necesita aprender nada del dataset
+ 
+    def _convert_to_usd(self, value: str) -> float:
+        """
+        Extrae símbolo y número de un string como '£425.8' y convierte a USD.
+ 
+        Args:
+            value: String con símbolo de moneda y número.
+ 
+        Returns:
+            Monto en USD como float, o NaN si no se puede parsear.
+        """
+        if pd.isna(value) or str(value) == "nan":
+            return np.nan
+ 
+        value = str(value).strip()
+ 
+        # Detectar símbolo (puede ser 1 o 2 caracteres: Rs vs £)
+        for symbol in sorted(self.exchange_rates.keys(), key=len, reverse=True):
+            if value.startswith(symbol):
+                try:
+                    amount = float(re.sub(r"[^\d.]", "", value))
+                    return round(amount * self.exchange_rates[symbol], 4)
+                except ValueError:
+                    return np.nan
+ 
+        # Si no hay símbolo reconocido, intentar extraer el número directamente
+        try:
+            return float(re.sub(r"[^\d.]", "", value))
+        except ValueError:
+            return np.nan
  
     def transform(self, X):
         X_copy = X.copy()
         if "billing_amount" in X_copy.columns:
-            # Extraemos solo la parte numérica con regex y convertimos a float
-            X_copy["billing_amount"] = (
-                X_copy["billing_amount"]
-                .astype(str)
-                .str.extract(r"([\d.]+)")[0]  # grupo 0 = primer match
-                .astype(float)
-            )
+            X_copy["billing_amount"] = X_copy["billing_amount"].apply(self._convert_to_usd)
         return X_copy
  
  
