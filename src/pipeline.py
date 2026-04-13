@@ -25,7 +25,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.impute import SimpleImputer
-
+ 
 from transformers import (
     DropColumnsTransformer,
     DropHighMissingTransformer,
@@ -43,36 +43,37 @@ from config import (
     HIGH_MISSING_THRESHOLD,
     SIMPLE_IMPUTE_THRESHOLD,
 )
-
-
+ 
+ 
 def build_pipeline(apply_capping: bool = True) -> Pipeline:
     """
     Construye y retorna el Pipeline completo listo para usar.
-
+ 
     Args:
         apply_capping: Si True (default), aplica Winsorización a outliers.
                        Ponlo en False para comparar resultados sin capping.
-
+ 
     Returns:
         Pipeline de sklearn con todos los pasos de limpieza y transformación.
-
+ 
     Ejemplo de uso:
         pipeline = build_pipeline()
         X_clean  = pipeline.fit_transform(df_raw.drop(columns=['follow_up_required']))
     """
-
+ 
     # ------------------------------------------------------------------
     # Paso A: Ruta para variables NUMÉRICAS
-    # Recibe: age, billing_amount, waiting_days
+    # Recibe: age, billing_amount, waiting_days, appointment_dow
     # ------------------------------------------------------------------
     numeric_pipeline = Pipeline([
+        # Imputar PRIMERO: billing_amount tiene 50 nulos (5%).
+        # El capper no puede operar sobre NaN, así que va antes.
+        ("imputer",       SmartImputerTransformer(low_threshold=SIMPLE_IMPUTE_THRESHOLD)),
         ("capper",        OutlierCapper(apply_capping=apply_capping)),
         ("zero_variance", DropZeroVarianceTransformer()),
         ("scaler",        StandardScaler()),
-        # StandardScaler: convierte cada columna a media=0, std=1
-        # Necesario para que el modelo no favorezca variables con rangos grandes
     ])
-
+ 
     # ------------------------------------------------------------------
     # Paso B: Ruta para variables CATEGÓRICAS
     # Recibe: gender, department, doctor
@@ -84,7 +85,7 @@ def build_pipeline(apply_capping: bool = True) -> Pipeline:
         # binarias (0/1). handle_unknown='ignore' evita errores si aparece
         # un valor nuevo en producción que no estaba en el entrenamiento.
     ])
-
+ 
     # ------------------------------------------------------------------
     # Paso C: ColumnTransformer — aplica A y B en paralelo
     # ------------------------------------------------------------------
@@ -95,29 +96,29 @@ def build_pipeline(apply_capping: bool = True) -> Pipeline:
         ],
         remainder="drop",  # elimina cualquier columna no listada
     )
-
+ 
     # ------------------------------------------------------------------
     # Pipeline principal: pre-limpieza → limpieza → preprocesamiento
     # ------------------------------------------------------------------
     pipeline = Pipeline([
         # Paso 1: normalizar género (8 variantes → Male/Female)
         ("gender_norm",    GenderNormalizerTransformer()),
-
+ 
         # Paso 2: limpiar montos (extraer número de '£425.8' → 425.8)
         ("billing_clean",  BillingCleanerTransformer()),
-
+ 
         # Paso 3: procesar fechas (generar waiting_days, appointment_dow)
         ("date_features",  DateFeatureTransformer()),
-
+ 
         # Paso 4: eliminar columnas sin valor predictivo
         # (patient_name, booking_date, appointment_date ya procesadas)
         ("drop_cols",      DropColumnsTransformer(COLS_TO_DROP)),
-
+ 
         # Paso 5: descartar columnas con demasiados nulos
         ("drop_missing",   DropHighMissingTransformer(threshold=HIGH_MISSING_THRESHOLD)),
-
+ 
         # Paso 6: rutas paralelas para numéricas y categóricas
         ("preprocessor",   preprocessor),
     ])
-
+ 
     return pipeline

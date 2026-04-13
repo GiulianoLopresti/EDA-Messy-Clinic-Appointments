@@ -1,7 +1,9 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
-*.py[codz]
 *$py.class
+*.py[cod]
+*.pyo
+.ipynb_checkpoints/
 
 # Environments
 .venv/
@@ -11,8 +13,20 @@ env/
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# Visual Studio Code
+# IDEs
 .vscode/
+.idea/
+ 
+# Datos (el CSV crudo no va al repositorio por tamaño/privacidad)
+data/raw/*.csv
+data/processed/
 
-# data/raw/
-# data/processed/
+# Sí incluir el metadata de integridad
+!data/raw/metadata.json
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Outputs generados (se regeneran con el notebook)
+outputs/*.png
