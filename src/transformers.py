@@ -199,8 +199,8 @@ class SmartImputerTransformer(BaseEstimator, TransformerMixin):
             else:
                 self.fill_values_[col] = X[col].mode()[0]
  
-        print(f"🧠 SmartImputer - Simples  (<{self.low_threshold*100:.0f}%): {self.cols_simples_}")
-        print(f"🚧 SmartImputer - Complejas (>{self.low_threshold*100:.0f}%): {self.cols_complejas_}")
+        print(f"SmartImputer - Simples  (<{self.low_threshold*100:.0f}%): {self.cols_simples_}")
+        print(f"SmartImputer - Complejas (>{self.low_threshold*100:.0f}%): {self.cols_complejas_}")
         return self
  
     def transform(self, X):
