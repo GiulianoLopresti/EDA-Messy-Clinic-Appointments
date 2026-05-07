@@ -25,18 +25,18 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.impute import SimpleImputer
- 
-from transformers import (
+from sklearn.feature_selection import VarianceThreshold
+
+from src.transformers import (
     DropColumnsTransformer,
     DropHighMissingTransformer,
     OutlierCapper,
-    DropZeroVarianceTransformer,
     SmartImputerTransformer,
     GenderNormalizerTransformer,
     BillingCleanerTransformer,
     DateFeatureTransformer,
 )
-from config import (
+from src.config import (
     COLS_TO_DROP,
     NUMERIC_COLS,
     CATEGORICAL_COLS,
@@ -70,7 +70,7 @@ def build_pipeline(apply_capping: bool = True) -> Pipeline:
         # El capper no puede operar sobre NaN, así que va antes.
         ("imputer",       SmartImputerTransformer(low_threshold=SIMPLE_IMPUTE_THRESHOLD)),
         ("capper",        OutlierCapper(apply_capping=apply_capping)),
-        ("zero_variance", DropZeroVarianceTransformer()),
+        ("zero_variance", VarianceThreshold(threshold=0.0)),
         ("scaler",        StandardScaler()),
     ])
  
